@@ -215,8 +215,24 @@ const (
 	// default values: k8s-app=kube-dns
 	PodRestartSelector = "pod-restart-selector"
 
-	// Filepath where anet operator metrics encryption certificate (server key, server cert and client CA cert) is mounted
-	OperatorMetricsCertDir = "operator-metrics-cert-dir"
+	// Enable mtls for metrics server
+	EnableMetricsServerTLS = "enable-metrics-server-tls"
+
+	// Makes sure metrics server is not started if tls in enabled  but could not be configured
+	EnableStrictTLS = "enable-strict-tls"
+
+	// MetricsServerTLSCertFile specifies the path to the public key file for
+	// the metrics server. The file must contain PEM encoded data.
+	MetricsServerTLSCertFile = "metrics-server-tls-cert-file"
+
+	// MetricsServerTLSKeyFile specifies the path to the private key file for
+	// the metrics server. The file must contain PEM encoded data.
+	MetricsServerTLSKeyFile = "metrics-server-tls-key-file"
+
+	// MetricsServerTLSClientCAFiles specifies the path to one or more client
+	// CA certificates to use for TLS with mutual authentication (mTLS) on the
+	// metrics server. The files must contain PEM encoded data.
+	MetricsServerTLSClientCAFiles = "metrics-server-tls-client-ca-files"
 )
 
 // OperatorConfig is the configuration used by the operator.
@@ -397,15 +413,35 @@ type OperatorConfig struct {
 	// PodRestartSelector specify the labels contained in the pod that needs to be restarted before the node can be de-stained
 	PodRestartSelector string
 
-	// Metrics Encryption Certificate path
-	OperatorMetricsCertDir string
+	//Enable mTLS for operator metrics server
+	EnableMetricsServerTLS bool
+
+	// Makes sure metrics server is not started if tls in enabled  but could not be configured
+	EnableStrictTLS bool
+
+	// MetricsServerTLSCertFile specifies the path to the public key file for
+	// the metrics server. The file must contain PEM encoded data.
+	MetricsServerTLSCertFile string
+
+	// MetricsServerTLSKeyFile specifies the path to the private key file for
+	// the metrics server. The file must contain PEM encoded data.
+	MetricsServerTLSKeyFile string
+
+	// MetricsServerTLSClientCAFiles specifies the path to one or more client
+	// CA certificates to use for TLS with mutual authentication (mTLS) on the
+	// metrics server. The files must contain PEM encoded data.
+	MetricsServerTLSClientCAFiles []string
 }
 
 // Populate sets all options with the values from viper.
 func (c *OperatorConfig) Populate(vp *viper.Viper) {
 	c.NodesGCInterval = vp.GetDuration(NodesGCInterval)
 	c.EnableMetrics = vp.GetBool(EnableMetrics)
-	c.OperatorMetricsCertDir = vp.GetString((OperatorMetricsCertDir))
+	c.EnableMetricsServerTLS = vp.GetBool(EnableMetricsServerTLS)
+	c.EnableStrictTLS = vp.GetBool(EnableStrictTLS)
+	c.MetricsServerTLSCertFile = vp.GetString(MetricsServerTLSCertFile)
+	c.MetricsServerTLSKeyFile = vp.GetString(MetricsServerTLSKeyFile)
+	c.MetricsServerTLSClientCAFiles = vp.GetStringSlice(MetricsServerTLSClientCAFiles)
 	c.EndpointGCInterval = vp.GetDuration(EndpointGCInterval)
 	c.SyncK8sServices = vp.GetBool(SyncK8sServices)
 	c.SyncK8sNodes = vp.GetBool(SyncK8sNodes)
@@ -510,10 +546,6 @@ func (c *OperatorConfig) Populate(vp *viper.Viper) {
 		c.IPAMAutoCreateCiliumPodIPPools = m
 	}
 
-	// ask if to keep non-tls too
-	if len(c.OperatorMetricsCertDir) == 0 {
-		c.EnableMetrics = false
-	}
 }
 
 // Config represents the operator configuration.

@@ -197,8 +197,20 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 			option.EnableIPv6Name, "true"))
 	option.BindEnv(vp, operatorOption.NodeCIDRMaskSizeIPv6)
 
-	flags.String(operatorOption.OperatorMetricsCertDir, "", "Filepath where metrics certificates (server key, server cert and client CA cert) is mounted")
-	option.BindEnv(vp, operatorOption.OperatorMetricsCertDir)
+	flags.Bool(operatorOption.EnableMetricsServerTLS, false, "Enable mTLS for operator metrics server")
+	option.BindEnv(vp, operatorOption.EnableMetricsServerTLS)
+
+	flags.Bool(operatorOption.EnableStrictTLS, false, "Makes sure metrics server is not started if tls in enabled  but could not be configured")
+	option.BindEnv(vp, operatorOption.EnableStrictTLS)
+
+	flags.String(operatorOption.MetricsServerTLSCertFile, defaults.MetricsServerTLSCertFile, "Path to the public key file for the operator metrics server. The file must contain PEM encoded data.")
+	option.BindEnv(vp, operatorOption.MetricsServerTLSCertFile)
+
+	flags.String(operatorOption.MetricsServerTLSKeyFile, defaults.MetricsServerTLSKeyFile, "Path to the private key file for the operator metrics server. The file must contain PEM encoded data.")
+	option.BindEnv(vp, operatorOption.MetricsServerTLSKeyFile)
+
+	flags.StringSlice(operatorOption.MetricsServerTLSClientCAFiles, []string{}, "Paths to one or more public key files of client CA certificates to use for TLS with mutual authentication (mTLS). The files must contain PEM encoded data. When provided, this option effectively enables mTLS.")
+	option.BindEnv(vp, operatorOption.MetricsServerTLSClientCAFiles)
 
 	flags.String(option.IdentityAllocationMode, option.IdentityAllocationModeKVstore, "Method to use for identity allocation")
 	option.BindEnv(vp, option.IdentityAllocationMode)

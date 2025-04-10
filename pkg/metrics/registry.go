@@ -4,7 +4,10 @@
 package metrics
 
 import (
+	"crypto/tls"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -17,9 +20,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 
+	"github.com/cilium/cilium/pkg/crypto/certloader"
+	"github.com/cilium/cilium/pkg/hubble/server/serveroption"
 	"github.com/cilium/cilium/pkg/lock"
 	metricpkg "github.com/cilium/cilium/pkg/metrics/metric"
 	"github.com/cilium/cilium/pkg/option"
+	"github.com/cilium/cilium/pkg/time"
 )
 
 var defaultRegistryConfig = RegistryConfig{
@@ -43,6 +49,7 @@ type RegistryParams struct {
 	cell.In
 
 	Logger     logrus.FieldLogger
+	SLogger    *slog.Logger
 	Shutdowner hive.Shutdowner
 	Lifecycle  cell.Lifecycle
 
@@ -92,7 +99,52 @@ func NewRegistry(params RegistryParams) *Registry {
 			OnStart: func(hc cell.HookContext) error {
 				go func() {
 					params.Logger.Infof("Serving prometheus metrics on %s", params.Config.PrometheusServeAddr)
-					err := srv.ListenAndServe()
+					//ubd
+					var err error
+					if params.DaemonConfig.EnableMetricsServerTLS == true {
+						var metricsTLSConfig *certloader.WatchedServerConfig
+						metricsTLSConfigChan, err := certloader.FutureWatchedServerConfig(
+							params.SLogger.With("config", "metrics-server-tls"),
+							params.DaemonConfig.MetricsServerTLSClientCAFiles,
+							params.DaemonConfig.MetricsServerTLSCertFile,
+							params.DaemonConfig.MetricsServerTLSKeyFile,
+						)
+						if err == nil {
+
+							waitingMsgTimeout := time.After(30 * time.Second)
+							timeOver := false
+							for metricsTLSConfig == nil && !timeOver {
+								select {
+								case metricsTLSConfig = <-metricsTLSConfigChan:
+								case <-waitingMsgTimeout:
+									params.Logger.Infof("Waiting for Agent metrics server TLS certificate and key files to be created")
+								case <-hc.Done():
+									timeOver = true
+									err = fmt.Errorf("timeout while waiting for Agent metrics server TLS certificate and key files to be created: %w", hc.Err())
+									break
+								}
+							}
+
+							go func() {
+								<-hc.Done()
+								metricsTLSConfig.Stop()
+							}()
+						}
+						if metricsTLSConfig != nil {
+							srv.TLSConfig = metricsTLSConfig.ServerConfig(&tls.Config{ //nolint:gosec
+								MinVersion: serveroption.MinTLSVersion,
+							})
+							err = srv.ListenAndServeTLS("", "")
+						} else if params.DaemonConfig.EnableStrictTLS == true {
+							err = fmt.Errorf("Metrics Server: TLS Configuration Error")
+						} else {
+							err = srv.ListenAndServe()
+						}
+
+					} else {
+						err = srv.ListenAndServe()
+					}
+
 					if err != nil && !errors.Is(err, http.ErrServerClosed) {
 						params.Shutdowner.Shutdown(hive.ShutdownWithError(err))
 					}

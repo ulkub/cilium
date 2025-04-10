@@ -4,10 +4,13 @@
 package metrics
 
 import (
+	"crypto/tls"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"regexp"
+	"time"
 
 	"github.com/cilium/hive/cell"
 	"github.com/prometheus/client_golang/prometheus"
@@ -15,7 +18,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	controllerRuntimeMetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
+	"github.com/cilium/cilium/pkg/crypto/certloader"
 	"github.com/cilium/cilium/pkg/hive"
+	"github.com/cilium/cilium/pkg/hubble/server/serveroption"
 	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/metrics"
 	"github.com/cilium/cilium/pkg/metrics/metric"
@@ -44,17 +49,65 @@ type metricsManager struct {
 	server http.Server
 
 	metrics []metric.WithMetadata
-	certdir string
+
+	SharedCfg SharedConfig
 }
 
 func (mm *metricsManager) Start(ctx cell.HookContext) error {
+	//here
+	var metricsTLSConfig *certloader.WatchedServerConfig
+	if mm.SharedCfg.EnableMetricsServerTLS == true {
+		metricsTLSConfigChan, err := certloader.FutureWatchedServerConfig(
+			mm.logger.With(logfields.Config, "metrics-server-tls"),
+			mm.SharedCfg.MetricsServerTLSClientCAFiles,
+			mm.SharedCfg.MetricsServerTLSCertFile,
+			mm.SharedCfg.MetricsServerTLSKeyFile,
+		)
+		if err == nil {
+			waitingMsgTimeout := time.After(30 * time.Second)
+			timeOver := false
+			for metricsTLSConfig == nil && !timeOver {
+				select {
+				case metricsTLSConfig = <-metricsTLSConfigChan:
+				case <-waitingMsgTimeout:
+					mm.logger.Info("Waiting for Operator metrics server TLS certificate and key files to be created")
+				case <-ctx.Done():
+					timeOver = true
+					err = fmt.Errorf("timeout while waiting for Agent metrics server TLS certificate and key files to be created: %w", ctx.Err())
+					break
+				}
+			}
+			go func() {
+				<-ctx.Done()
+				metricsTLSConfig.Stop()
+			}()
+		}
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(Registry, promhttp.HandlerOpts{}))
 	mm.server.Handler = mux
 
 	go func() {
 		mm.logger.Info("Starting metrics server", logfields.Address, mm.server.Addr)
-		if err := mm.server.ListenAndServeTLS(mm.certdir+"/tls.crt", mm.certdir+"/tls.key"); !errors.Is(err, http.ErrServerClosed) {
+		var err error
+		if mm.SharedCfg.EnableMetricsServerTLS == true {
+			if metricsTLSConfig != nil {
+				mm.server.TLSConfig = metricsTLSConfig.ServerConfig(&tls.Config{ //nolint:gosec
+					MinVersion: serveroption.MinTLSVersion,
+				})
+				err = mm.server.ListenAndServeTLS("", "")
+			} else if mm.SharedCfg.EnableStrictTLS == false {
+				err = mm.server.ListenAndServe()
+			} else {
+				err = fmt.Errorf("Metrics Server: TLS Configuration Error")
+				///???
+			}
+		} else {
+			err = mm.server.ListenAndServe()
+		}
+
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			mm.logger.Error("Unable to start metrics server", logfields.Error, err)
 			mm.shutdowner.Shutdown()
 		}
@@ -76,19 +129,12 @@ func registerMetricsManager(p params) {
 		return
 	}
 
-	// burda boyle pat diye donmek filan
-	tlsConfig, err := metrics.TLSConfig(p.SharedCfg.OperatorMetricsCertDir)
-	if err != nil {
-		//log.WithError(err).Error("MetricsServer TLS Config Error")
-		return
-	}
-
 	mm := &metricsManager{
 		logger:     p.Logger,
 		shutdowner: p.Shutdowner,
-		server:     http.Server{Addr: p.Cfg.OperatorPrometheusServeAddr, TLSConfig: tlsConfig},
+		server:     http.Server{Addr: p.Cfg.OperatorPrometheusServeAddr},
 		metrics:    p.Metrics,
-		certdir:    p.SharedCfg.OperatorMetricsCertDir,
+		SharedCfg:  p.SharedCfg,
 	}
 
 	// Use the same Registry as controller-runtime, so that we don't need

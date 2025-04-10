@@ -64,9 +64,8 @@ type config struct {
 	// EnableMetricsServerTLS run the Hubble metrics server on the given listen
 	// address with TLS.
 	EnableMetricsServerTLS bool `mapstructure:"hubble-metrics-server-enable-tls"`
-	// HubbleMetricsCertDir specifies the filepath where hubble metrics certificates
-	// (server key, server cert and client CA cert) is mounted
-	HubbleMetricsCertDir string `mapstructure:"hubble-metrics-cert-dir"`
+	// EnableStrictTLS makes sure metrics server is not started if tls in enabled  but could not be configured
+	EnableStrictTLS bool `mapstructure:"hubble-metrics-enable-strict-tls"`
 	// MetricsServerTLSCertFile specifies the path to the public key file for
 	// the Hubble metrics server. The file must contain PEM encoded data.
 	MetricsServerTLSCertFile string `mapstructure:"hubble-metrics-server-tls-cert-file"`
@@ -122,7 +121,7 @@ var defaultConfig = config{
 	// Hubble metrics server configuration
 	MetricsServer:                 "",
 	EnableMetricsServerTLS:        false,
-	HubbleMetricsCertDir:          "",
+	EnableStrictTLS:               false,
 	MetricsServerTLSCertFile:      "",
 	MetricsServerTLSKeyFile:       "",
 	MetricsServerTLSClientCAFiles: []string{},
@@ -164,7 +163,7 @@ func (def config) Flags(flags *pflag.FlagSet) {
 	// Hubble metrics server configuration
 	flags.String("hubble-metrics-server", def.MetricsServer, "Address to serve Hubble metrics on.")
 	flags.Bool("hubble-metrics-server-enable-tls", def.EnableMetricsServerTLS, "Run the Hubble metrics server on the given listen address with TLS.")
-	flags.String("hubble-metrics-cert-dir", def.HubbleMetricsCertDir, "Filepath where hubble metrics certificates (server key, server cert and client CA cert) is mounted")
+	flags.Bool("hubble-metrics-enable-strict-tls", def.EnableStrictTLS, "Makes sure that metrics server is not started if tls in enabled  but could not be configured")
 	flags.String("hubble-metrics-server-tls-cert-file", def.MetricsServerTLSCertFile, "Path to the public key file for the Hubble metrics server. The file must contain PEM encoded data.")
 	flags.String("hubble-metrics-server-tls-key-file", def.MetricsServerTLSKeyFile, "Path to the private key file for the Hubble metrics server. The file must contain PEM encoded data.")
 	flags.StringSlice("hubble-metrics-server-tls-client-ca-files", def.MetricsServerTLSClientCAFiles, "Paths to one or more public key files of client CA certificates to use for TLS with mutual authentication (mTLS). The files must contain PEM encoded data. When provided, this option effectively enables mTLS.")

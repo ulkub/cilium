@@ -5,11 +5,9 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
-
-	"github.com/cilium/cilium/pkg/crypto/certloader"
+	/*"github.com/cilium/cilium/pkg/crypto/certloader"
 	"github.com/cilium/cilium/pkg/logging/logfields"
-	"github.com/cilium/cilium/pkg/time"
-)
+	"github.com/cilium/cilium/pkg/time"*/)
 
 // caPoolFileStore is a store for client CA Pools, such as trust store bundles.
 type caPoolFileStore struct {
@@ -71,6 +69,7 @@ func TLSConfig(certdir string) (*tls.Config, error) {
 	return config, nil
 }
 
+/*
 // trial to take TLSConfig creation from Hubble
 func TLSConfigHubble(certdir string) (*tls.Config, error) {
 	var metricsTLSConfig *certloader.WatchedServerConfig
@@ -98,3 +97,4 @@ func TLSConfigHubble(certdir string) (*tls.Config, error) {
 		metricsTLSConfig.Stop()
 	}()
 }
+*/

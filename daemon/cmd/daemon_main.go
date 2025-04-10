@@ -188,6 +188,21 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	})
 
 	// Env bindings
+	flags.Bool(option.EnableMetricsServerTLS, defaults.EnableMetricsServerTLS, "Enable mTLS for metrics server")
+	option.BindEnv(vp, option.EnableMetricsServerTLS)
+
+	flags.Bool(option.EnableStrictTLS, defaults.EnableStrictTLS, "Makes sure metrics server is not started if tls in enabled but could not be configured")
+	option.BindEnv(vp, option.EnableStrictTLS)
+
+	flags.String(option.MetricsServerTLSCertFile, defaults.MetricsServerTLSCertFile, "Path to the public key file for the metrics server. The file must contain PEM encoded data.")
+	option.BindEnv(vp, option.MetricsServerTLSCertFile)
+
+	flags.String(option.MetricsServerTLSKeyFile, defaults.MetricsServerTLSKeyFile, "Path to the private key file for the metrics server. The file must contain PEM encoded data.")
+	option.BindEnv(vp, option.MetricsServerTLSKeyFile)
+
+	flags.StringSlice(option.MetricsServerTLSClientCAFiles, []string{}, "Paths to one or more public key files of client CA certificates to use for TLS with mutual authentication (mTLS). The files must contain PEM encoded data. When provided, this option effectively enables mTLS.")
+	option.BindEnv(vp, option.MetricsServerTLSClientCAFiles)
+
 	flags.Int(option.AgentHealthPort, defaults.AgentHealthPort, "TCP port for agent health status API")
 	option.BindEnv(vp, option.AgentHealthPort)
 

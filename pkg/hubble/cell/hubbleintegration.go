@@ -5,7 +5,6 @@ package hubblecell
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -48,7 +47,6 @@ import (
 	"github.com/cilium/cilium/pkg/k8s/watchers"
 	"github.com/cilium/cilium/pkg/logging"
 	"github.com/cilium/cilium/pkg/logging/logfields"
-	ciliumMetrics "github.com/cilium/cilium/pkg/metrics"
 	monitorAgent "github.com/cilium/cilium/pkg/monitor/agent"
 	"github.com/cilium/cilium/pkg/node"
 	nodeManager "github.com/cilium/cilium/pkg/node/manager"
@@ -271,40 +269,30 @@ func (h *hubbleIntegration) launch(ctx context.Context) (*observer.LocalObserver
 
 	grpcMetrics := grpc_prometheus.NewServerMetrics()
 	var metricsTLSConfig *certloader.WatchedServerConfig
-	var tlsConfig *tls.Config
 	if h.config.EnableMetricsServerTLS {
-		if len(h.config.HubbleMetricsCertDir) != 0 {
-			tConfig, err := ciliumMetrics.TLSConfig(h.config.HubbleMetricsCertDir)
-			if err != nil {
-				//log.WithError(err).Error("MetricsServer TLS Config Error")
-				return nil, fmt.Errorf("failed to initialize Hubble metrics server TLS configuration: %w", err)
-			}
-			tlsConfig = tConfig
-		} else {
-			metricsTLSConfigChan, err := certloader.FutureWatchedServerConfig(
-				h.log.With(logfields.Config, "hubble-metrics-server-tls"),
-				h.config.MetricsServerTLSClientCAFiles,
-				h.config.MetricsServerTLSCertFile,
-				h.config.MetricsServerTLSKeyFile,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to initialize Hubble metrics server TLS configuration: %w", err)
-			}
-			waitingMsgTimeout := time.After(30 * time.Second)
-			for metricsTLSConfig == nil {
-				select {
-				case metricsTLSConfig = <-metricsTLSConfigChan:
-				case <-waitingMsgTimeout:
-					h.log.Info("Waiting for Hubble metrics server TLS certificate and key files to be created")
-				case <-ctx.Done():
-					return nil, fmt.Errorf("timeout while waiting for Hubble metrics server TLS certificate and key files to be created: %w", ctx.Err())
-				}
-			}
-			go func() {
-				<-ctx.Done()
-				metricsTLSConfig.Stop()
-			}()
+		metricsTLSConfigChan, err := certloader.FutureWatchedServerConfig(
+			h.log.With(logfields.Config, "hubble-metrics-server-tls"),
+			h.config.MetricsServerTLSClientCAFiles,
+			h.config.MetricsServerTLSCertFile,
+			h.config.MetricsServerTLSKeyFile,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize Hubble metrics server TLS configuration: %w", err)
 		}
+		waitingMsgTimeout := time.After(30 * time.Second)
+		for metricsTLSConfig == nil {
+			select {
+			case metricsTLSConfig = <-metricsTLSConfigChan:
+			case <-waitingMsgTimeout:
+				h.log.Info("Waiting for Hubble metrics server TLS certificate and key files to be created")
+			case <-ctx.Done():
+				return nil, fmt.Errorf("timeout while waiting for Hubble metrics server TLS certificate and key files to be created: %w", ctx.Err())
+			}
+		}
+		go func() {
+			<-ctx.Done()
+			metricsTLSConfig.Stop()
+		}()
 	}
 
 	var srv *http.Server
@@ -362,16 +350,9 @@ func (h *hubbleIntegration) launch(ctx context.Context) (*observer.LocalObserver
 		metrics.InitMetricsServerHandler(srv, metrics.Registry, h.config.EnableOpenMetrics)
 
 		go func() {
-			if len(h.config.HubbleMetricsCertDir) != 0 {
-				if err := metrics.StartMetricsServerDir(srv, h.log, h.config.HubbleMetricsCertDir, tlsConfig, grpcMetrics); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					h.log.Error("Hubble metrics server encountered an error", logfields.Error, err)
-					return
-				}
-			} else {
-				if err := metrics.StartMetricsServer(srv, h.log, metricsTLSConfig, grpcMetrics); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					h.log.Error("Hubble metrics server encountered an error", logfields.Error, err)
-					return
-				}
+			if err := metrics.StartMetricsServer(srv, h.log, metricsTLSConfig, h.config.EnableStrictTLS, grpcMetrics); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				h.log.Error("Hubble metrics server encountered an error", logfields.Error, err)
+				return
 			}
 		}()
 
