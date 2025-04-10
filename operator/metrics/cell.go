@@ -42,5 +42,6 @@ func (def Config) Flags(flags *pflag.FlagSet) {
 // this module and others.
 type SharedConfig struct {
 	// EnableMetrics is set to true if operator metrics are enabled
-	EnableMetrics bool
+	EnableMetrics          bool
+	OperatorMetricsCertDir string
 }

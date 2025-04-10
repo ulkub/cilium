@@ -44,6 +44,7 @@ type metricsManager struct {
 	server http.Server
 
 	metrics []metric.WithMetadata
+	certdir string
 }
 
 func (mm *metricsManager) Start(ctx cell.HookContext) error {
@@ -53,7 +54,7 @@ func (mm *metricsManager) Start(ctx cell.HookContext) error {
 
 	go func() {
 		mm.logger.Info("Starting metrics server", logfields.Address, mm.server.Addr)
-		if err := mm.server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		if err := mm.server.ListenAndServeTLS(mm.certdir+"/tls.crt", mm.certdir+"/tls.key"); !errors.Is(err, http.ErrServerClosed) {
 			mm.logger.Error("Unable to start metrics server", logfields.Error, err)
 			mm.shutdowner.Shutdown()
 		}
@@ -75,11 +76,19 @@ func registerMetricsManager(p params) {
 		return
 	}
 
+	// burda boyle pat diye donmek filan
+	tlsConfig, err := metrics.TLSConfig(p.SharedCfg.OperatorMetricsCertDir)
+	if err != nil {
+		//log.WithError(err).Error("MetricsServer TLS Config Error")
+		return
+	}
+
 	mm := &metricsManager{
 		logger:     p.Logger,
 		shutdowner: p.Shutdowner,
-		server:     http.Server{Addr: p.Cfg.OperatorPrometheusServeAddr},
+		server:     http.Server{Addr: p.Cfg.OperatorPrometheusServeAddr, TLSConfig: tlsConfig},
 		metrics:    p.Metrics,
+		certdir:    p.SharedCfg.OperatorMetricsCertDir,
 	}
 
 	// Use the same Registry as controller-runtime, so that we don't need

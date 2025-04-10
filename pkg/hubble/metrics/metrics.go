@@ -5,6 +5,7 @@ package metrics
 
 import (
 	"crypto/tls"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -145,4 +146,12 @@ func StartMetricsServer(srv *http.Server, log logging.FieldLogger, metricsTLSCon
 		return srv.ListenAndServeTLS("", "")
 	}
 	return srv.ListenAndServe()
+}
+
+func StartMetricsServerDir(srv *http.Server, log logging.FieldLogger, certdir string, tlsConfig *tls.Config, grpcMetrics *grpc_prometheus.ServerMetrics) error {
+	if tlsConfig != nil {
+		srv.TLSConfig = tlsConfig
+		return srv.ListenAndServeTLS(certdir+"/tls.crt", certdir+"/tls.key")
+	}
+	return errors.New("Metrics Server: TLS Configuration Error")
 }

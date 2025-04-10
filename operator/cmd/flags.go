@@ -197,6 +197,9 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 			option.EnableIPv6Name, "true"))
 	option.BindEnv(vp, operatorOption.NodeCIDRMaskSizeIPv6)
 
+	flags.String(operatorOption.OperatorMetricsCertDir, "", "Filepath where metrics certificates (server key, server cert and client CA cert) is mounted")
+	option.BindEnv(vp, operatorOption.OperatorMetricsCertDir)
+
 	flags.String(option.IdentityAllocationMode, option.IdentityAllocationModeKVstore, "Method to use for identity allocation")
 	option.BindEnv(vp, option.IdentityAllocationMode)
 

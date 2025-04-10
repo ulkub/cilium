@@ -119,7 +119,8 @@ var (
 				// to add their metrics when it's set to true. Therefore, we leave the flag as global
 				// instead of declaring it as part of the metrics cell.
 				// This should be changed once the IPAM allocator is modularized.
-				EnableMetrics: operatorCfg.EnableMetrics,
+				EnableMetrics:          operatorCfg.EnableMetrics,
+				OperatorMetricsCertDir: operatorCfg.OperatorMetricsCertDir,
 			}
 		}),
 	)

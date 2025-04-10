@@ -214,6 +214,9 @@ const (
 	// PodRestartSelector specify the labels contained in the pod that needs to be restarted before the node can be de-stained
 	// default values: k8s-app=kube-dns
 	PodRestartSelector = "pod-restart-selector"
+
+	// Filepath where anet operator metrics encryption certificate (server key, server cert and client CA cert) is mounted
+	OperatorMetricsCertDir = "operator-metrics-cert-dir"
 )
 
 // OperatorConfig is the configuration used by the operator.
@@ -393,12 +396,16 @@ type OperatorConfig struct {
 
 	// PodRestartSelector specify the labels contained in the pod that needs to be restarted before the node can be de-stained
 	PodRestartSelector string
+
+	// Metrics Encryption Certificate path
+	OperatorMetricsCertDir string
 }
 
 // Populate sets all options with the values from viper.
 func (c *OperatorConfig) Populate(vp *viper.Viper) {
 	c.NodesGCInterval = vp.GetDuration(NodesGCInterval)
 	c.EnableMetrics = vp.GetBool(EnableMetrics)
+	c.OperatorMetricsCertDir = vp.GetString((OperatorMetricsCertDir))
 	c.EndpointGCInterval = vp.GetDuration(EndpointGCInterval)
 	c.SyncK8sServices = vp.GetBool(SyncK8sServices)
 	c.SyncK8sNodes = vp.GetBool(SyncK8sNodes)
@@ -501,6 +508,11 @@ func (c *OperatorConfig) Populate(vp *viper.Viper) {
 		log.Fatalf("unable to parse %s: %s", IPAMAutoCreateCiliumPodIPPools, err)
 	} else {
 		c.IPAMAutoCreateCiliumPodIPPools = m
+	}
+
+	// ask if to keep non-tls too
+	if len(c.OperatorMetricsCertDir) == 0 {
+		c.EnableMetrics = false
 	}
 }
 
