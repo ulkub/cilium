@@ -56,12 +56,12 @@ type metricsManager struct {
 func (mm *metricsManager) Start(ctx cell.HookContext) error {
 	//here
 	var metricsTLSConfig *certloader.WatchedServerConfig
-	if mm.SharedCfg.EnableMetricsServerTLS == true {
+	if mm.SharedCfg.OperatorEnableMetricsServerTLS == true {
 		metricsTLSConfigChan, err := certloader.FutureWatchedServerConfig(
 			mm.logger.With(logfields.Config, "metrics-server-tls"),
-			mm.SharedCfg.MetricsServerTLSClientCAFiles,
-			mm.SharedCfg.MetricsServerTLSCertFile,
-			mm.SharedCfg.MetricsServerTLSKeyFile,
+			mm.SharedCfg.OperatorMetricsServerTLSClientCAFiles,
+			mm.SharedCfg.OperatorMetricsServerTLSCertFile,
+			mm.SharedCfg.OperatorMetricsServerTLSKeyFile,
 		)
 		if err == nil {
 			waitingMsgTimeout := time.After(30 * time.Second)
@@ -91,13 +91,13 @@ func (mm *metricsManager) Start(ctx cell.HookContext) error {
 	go func() {
 		mm.logger.Info("Starting metrics server", logfields.Address, mm.server.Addr)
 		var err error
-		if mm.SharedCfg.EnableMetricsServerTLS == true {
+		if mm.SharedCfg.OperatorEnableMetricsServerTLS == true {
 			if metricsTLSConfig != nil {
 				mm.server.TLSConfig = metricsTLSConfig.ServerConfig(&tls.Config{ //nolint:gosec
 					MinVersion: serveroption.MinTLSVersion,
 				})
 				err = mm.server.ListenAndServeTLS("", "")
-			} else if mm.SharedCfg.EnableStrictTLS == false {
+			} else if mm.SharedCfg.OperatorEnableStrictTLS == false {
 				err = mm.server.ListenAndServe()
 			} else {
 				err = fmt.Errorf("Metrics Server: TLS Configuration Error")

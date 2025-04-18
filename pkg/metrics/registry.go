@@ -48,8 +48,9 @@ func (rc RegistryConfig) Flags(flags *pflag.FlagSet) {
 type RegistryParams struct {
 	cell.In
 
-	Logger     logrus.FieldLogger
-	SLogger    *slog.Logger
+	Logger  logrus.FieldLogger
+	SLogger *slog.Logger
+
 	Shutdowner hive.Shutdowner
 	Lifecycle  cell.Lifecycle
 
@@ -101,13 +102,13 @@ func NewRegistry(params RegistryParams) *Registry {
 					params.Logger.Infof("Serving prometheus metrics on %s", params.Config.PrometheusServeAddr)
 					//ubd
 					var err error
-					if params.DaemonConfig.EnableMetricsServerTLS == true {
+					if params.DaemonConfig.AgentEnableMetricsServerTLS == true {
 						var metricsTLSConfig *certloader.WatchedServerConfig
 						metricsTLSConfigChan, err := certloader.FutureWatchedServerConfig(
 							params.SLogger.With("config", "metrics-server-tls"),
-							params.DaemonConfig.MetricsServerTLSClientCAFiles,
-							params.DaemonConfig.MetricsServerTLSCertFile,
-							params.DaemonConfig.MetricsServerTLSKeyFile,
+							params.DaemonConfig.AgentMetricsServerTLSClientCAFiles,
+							params.DaemonConfig.AgentMetricsServerTLSCertFile,
+							params.DaemonConfig.AgentMetricsServerTLSKeyFile,
 						)
 						if err == nil {
 
@@ -135,7 +136,7 @@ func NewRegistry(params RegistryParams) *Registry {
 								MinVersion: serveroption.MinTLSVersion,
 							})
 							err = srv.ListenAndServeTLS("", "")
-						} else if params.DaemonConfig.EnableStrictTLS == true {
+						} else if params.DaemonConfig.AgentEnableStrictTLS == true {
 							err = fmt.Errorf("Metrics Server: TLS Configuration Error")
 						} else {
 							err = srv.ListenAndServe()

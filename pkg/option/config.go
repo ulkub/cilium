@@ -53,23 +53,23 @@ var (
 
 const (
 	// Enable tls for metrics server
-	EnableMetricsServerTLS = "enable-metrics-server-tls"
+	AgentEnableMetricsServerTLS = "agent-enable-metrics-server-tls"
 
 	// Makes sure metrics server is not started if tls in enabled  but could not be configured
-	EnableStrictTLS = "enable-strict-tls"
+	AgentEnableStrictTLS = "agent-enable-strict-tls"
 
 	// MetricsServerTLSCertFile specifies the path to the public key file for
 	// the metrics server. The file must contain PEM encoded data.
-	MetricsServerTLSCertFile = "metrics-server-tls-cert-file"
+	AgentMetricsServerTLSCertFile = "agent-metrics-server-tls-cert-file"
 
 	// MetricsServerTLSKeyFile specifies the path to the private key file for
 	// the metrics server. The file must contain PEM encoded data.
-	MetricsServerTLSKeyFile = "metrics-server-tls-key-file"
+	AgentMetricsServerTLSKeyFile = "agent-metrics-server-tls-key-file"
 
 	// MetricsServerTLSClientCAFiles specifies the path to one or more client
 	// CA certificates to use for TLS with mutual authentication (mTLS) on the
 	// metrics server. The files must contain PEM encoded data.
-	MetricsServerTLSClientCAFiles = "metrics-server-tls-client-ca-files"
+	AgentMetricsServerTLSClientCAFiles = "agent-metrics-server-tls-client-ca-files"
 
 	// AgentHealthPort is the TCP port for agent health status API
 	AgentHealthPort = "agent-health-port"
@@ -2268,23 +2268,23 @@ type DaemonConfig struct {
 	ConnectivityProbeFrequencyRatio float64
 
 	// Enable tls for metrics server
-	EnableMetricsServerTLS bool
+	AgentEnableMetricsServerTLS bool
 
 	// Makes sure metrics server is not started if tls in enabled  but could not be configured
-	EnableStrictTLS bool
+	AgentEnableStrictTLS bool
 
 	// MetricsServerTLSCertFile specifies the path to the public key file for
 	// the metrics server. The file must contain PEM encoded data.
-	MetricsServerTLSCertFile string
+	AgentMetricsServerTLSCertFile string
 
 	// MetricsServerTLSKeyFile specifies the path to the private key file for
 	// the metrics server. The file must contain PEM encoded data.
-	MetricsServerTLSKeyFile string
+	AgentMetricsServerTLSKeyFile string
 
 	// MetricsServerTLSClientCAFiles specifies the path to one or more client
 	// CA certificates to use for TLS with mutual authentication (mTLS) on the
 	// metrics server. The files must contain PEM encoded data.
-	MetricsServerTLSClientCAFiles []string
+	AgentMetricsServerTLSClientCAFiles []string
 }
 
 var (
@@ -2351,15 +2351,15 @@ var (
 
 		ConnectivityProbeFrequencyRatio: defaults.ConnectivityProbeFrequencyRatio,
 
-		EnableMetricsServerTLS: defaults.EnableMetricsServerTLS,
+		AgentEnableMetricsServerTLS: defaults.AgentEnableMetricsServerTLS,
 
-		EnableStrictTLS: defaults.EnableStrictTLS,
+		AgentEnableStrictTLS: defaults.AgentEnableStrictTLS,
 
-		MetricsServerTLSCertFile: defaults.MetricsServerTLSCertFile,
+		AgentMetricsServerTLSCertFile: defaults.AgentMetricsServerTLSCertFile,
 
-		MetricsServerTLSKeyFile: defaults.MetricsServerTLSKeyFile,
+		AgentMetricsServerTLSKeyFile: defaults.AgentMetricsServerTLSKeyFile,
 
-		MetricsServerTLSClientCAFiles: []string{},
+		AgentMetricsServerTLSClientCAFiles: []string{},
 	}
 )
 
@@ -2876,11 +2876,11 @@ func (c *DaemonConfig) SetupLogging(vp *viper.Viper, tag string) {
 func (c *DaemonConfig) Populate(vp *viper.Viper) {
 	var err error
 
-	c.EnableMetricsServerTLS = vp.GetBool(EnableMetricsServerTLS)
-	c.EnableStrictTLS = vp.GetBool(EnableStrictTLS)
-	c.MetricsServerTLSCertFile = vp.GetString(MetricsServerTLSCertFile)
-	c.MetricsServerTLSKeyFile = vp.GetString(MetricsServerTLSKeyFile)
-	c.MetricsServerTLSClientCAFiles = vp.GetStringSlice(MetricsServerTLSClientCAFiles)
+	c.AgentEnableMetricsServerTLS = vp.GetBool(AgentEnableMetricsServerTLS)
+	c.AgentEnableStrictTLS = vp.GetBool(AgentEnableStrictTLS)
+	c.AgentMetricsServerTLSCertFile = vp.GetString(AgentMetricsServerTLSCertFile)
+	c.AgentMetricsServerTLSKeyFile = vp.GetString(AgentMetricsServerTLSKeyFile)
+	c.AgentMetricsServerTLSClientCAFiles = vp.GetStringSlice(AgentMetricsServerTLSClientCAFiles)
 
 	c.AgentHealthPort = vp.GetInt(AgentHealthPort)
 	c.ClusterHealthPort = vp.GetInt(ClusterHealthPort)

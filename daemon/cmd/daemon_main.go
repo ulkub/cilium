@@ -188,20 +188,20 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	})
 
 	// Env bindings
-	flags.Bool(option.EnableMetricsServerTLS, defaults.EnableMetricsServerTLS, "Enable mTLS for metrics server")
-	option.BindEnv(vp, option.EnableMetricsServerTLS)
+	flags.Bool(option.AgentEnableMetricsServerTLS, defaults.AgentEnableMetricsServerTLS, "Enable mTLS for metrics server")
+	option.BindEnv(vp, option.AgentEnableMetricsServerTLS)
 
-	flags.Bool(option.EnableStrictTLS, defaults.EnableStrictTLS, "Makes sure metrics server is not started if tls in enabled but could not be configured")
-	option.BindEnv(vp, option.EnableStrictTLS)
+	flags.Bool(option.AgentEnableStrictTLS, defaults.AgentEnableStrictTLS, "Makes sure metrics server is not started if tls in enabled but could not be configured")
+	option.BindEnv(vp, option.AgentEnableStrictTLS)
 
-	flags.String(option.MetricsServerTLSCertFile, defaults.MetricsServerTLSCertFile, "Path to the public key file for the metrics server. The file must contain PEM encoded data.")
-	option.BindEnv(vp, option.MetricsServerTLSCertFile)
+	flags.String(option.AgentMetricsServerTLSCertFile, defaults.AgentMetricsServerTLSCertFile, "Path to the public key file for the metrics server. The file must contain PEM encoded data.")
+	option.BindEnv(vp, option.AgentMetricsServerTLSCertFile)
 
-	flags.String(option.MetricsServerTLSKeyFile, defaults.MetricsServerTLSKeyFile, "Path to the private key file for the metrics server. The file must contain PEM encoded data.")
-	option.BindEnv(vp, option.MetricsServerTLSKeyFile)
+	flags.String(option.AgentMetricsServerTLSKeyFile, defaults.AgentMetricsServerTLSKeyFile, "Path to the private key file for the metrics server. The file must contain PEM encoded data.")
+	option.BindEnv(vp, option.AgentMetricsServerTLSKeyFile)
 
-	flags.StringSlice(option.MetricsServerTLSClientCAFiles, []string{}, "Paths to one or more public key files of client CA certificates to use for TLS with mutual authentication (mTLS). The files must contain PEM encoded data. When provided, this option effectively enables mTLS.")
-	option.BindEnv(vp, option.MetricsServerTLSClientCAFiles)
+	flags.StringSlice(option.AgentMetricsServerTLSClientCAFiles, []string{}, "Paths to one or more public key files of client CA certificates to use for TLS with mutual authentication (mTLS). The files must contain PEM encoded data. When provided, this option effectively enables mTLS.")
+	option.BindEnv(vp, option.AgentMetricsServerTLSClientCAFiles)
 
 	flags.Int(option.AgentHealthPort, defaults.AgentHealthPort, "TCP port for agent health status API")
 	option.BindEnv(vp, option.AgentHealthPort)
