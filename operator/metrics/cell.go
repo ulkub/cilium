@@ -42,10 +42,10 @@ func (def Config) Flags(flags *pflag.FlagSet) {
 // this module and others.
 type SharedConfig struct {
 	// EnableMetrics is set to true if operator metrics are enabled
-	EnableMetrics                 bool
-	EnableMetricsServerTLS        bool
-	EnableStrictTLS               bool
-	MetricsServerTLSCertFile      string
-	MetricsServerTLSKeyFile       string
-	MetricsServerTLSClientCAFiles []string
+	EnableMetrics                         bool
+	OperatorEnableMetricsServerTLS        bool
+	OperatorEnableStrictTLS               bool
+	OperatorMetricsServerTLSCertFile      string
+	OperatorMetricsServerTLSKeyFile       string
+	OperatorMetricsServerTLSClientCAFiles []string
 }

@@ -56,33 +56,35 @@ type metricsManager struct {
 func (mm *metricsManager) Start(ctx cell.HookContext) error {
 	//here
 	var metricsTLSConfig *certloader.WatchedServerConfig
-	if mm.SharedCfg.EnableMetricsServerTLS == true {
-		metricsTLSConfigChan, err := certloader.FutureWatchedServerConfig(
-			mm.logger.With(logfields.Config, "metrics-server-tls"),
-			mm.SharedCfg.MetricsServerTLSClientCAFiles,
-			mm.SharedCfg.MetricsServerTLSCertFile,
-			mm.SharedCfg.MetricsServerTLSKeyFile,
-		)
-		if err == nil {
-			waitingMsgTimeout := time.After(30 * time.Second)
-			timeOver := false
-			for metricsTLSConfig == nil && !timeOver {
-				select {
-				case metricsTLSConfig = <-metricsTLSConfigChan:
-				case <-waitingMsgTimeout:
-					mm.logger.Info("Waiting for Operator metrics server TLS certificate and key files to be created")
-				case <-ctx.Done():
-					timeOver = true
-					err = fmt.Errorf("timeout while waiting for Agent metrics server TLS certificate and key files to be created: %w", ctx.Err())
-					break
+	go func() {
+		if mm.SharedCfg.OperatorEnableMetricsServerTLS == true {
+			metricsTLSConfigChan, err := certloader.FutureWatchedServerConfig(
+				mm.logger.With(logfields.Config, "operator-metrics-server-tls"),
+				mm.SharedCfg.OperatorMetricsServerTLSClientCAFiles,
+				mm.SharedCfg.OperatorMetricsServerTLSCertFile,
+				mm.SharedCfg.OperatorMetricsServerTLSKeyFile,
+			)
+			if err == nil {
+				waitingMsgTimeout := time.After(5 * time.Second)
+				for metricsTLSConfig == nil {
+					select {
+					case metricsTLSConfig = <-metricsTLSConfigChan:
+					case <-waitingMsgTimeout:
+						mm.logger.Info("Waiting for Operator metrics server TLS certificate and key files to be created")
+					case <-ctx.Done():
+
+						//	mm.logger.Info("timeout while waiting for Operator metrics server TLS certificate and key files to be created")
+						return
+					}
 				}
+				go func() {
+					mm.logger.Info("Veni vidi vici1")
+					<-ctx.Done()
+					metricsTLSConfig.Stop()
+				}()
 			}
-			go func() {
-				<-ctx.Done()
-				metricsTLSConfig.Stop()
-			}()
 		}
-	}
+	}()
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(Registry, promhttp.HandlerOpts{}))
@@ -91,23 +93,25 @@ func (mm *metricsManager) Start(ctx cell.HookContext) error {
 	go func() {
 		mm.logger.Info("Starting metrics server", logfields.Address, mm.server.Addr)
 		var err error
-		if mm.SharedCfg.EnableMetricsServerTLS == true {
+		stoppit := true
+		if mm.SharedCfg.OperatorEnableMetricsServerTLS == true {
 			if metricsTLSConfig != nil {
 				mm.server.TLSConfig = metricsTLSConfig.ServerConfig(&tls.Config{ //nolint:gosec
 					MinVersion: serveroption.MinTLSVersion,
 				})
 				err = mm.server.ListenAndServeTLS("", "")
-			} else if mm.SharedCfg.EnableStrictTLS == false {
+			} else if mm.SharedCfg.OperatorEnableStrictTLS == false {
 				err = mm.server.ListenAndServe()
 			} else {
 				err = fmt.Errorf("Metrics Server: TLS Configuration Error")
-				///???
+				stoppit = false
+				///NOT THE BEST Ulkub
 			}
 		} else {
 			err = mm.server.ListenAndServe()
 		}
 
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) && stoppit {
 			mm.logger.Error("Unable to start metrics server", logfields.Error, err)
 			mm.shutdowner.Shutdown()
 		}

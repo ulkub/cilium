@@ -144,7 +144,7 @@ func StartMetricsServer(srv *http.Server, log logging.FieldLogger, metricsTLSCon
 			MinVersion: serveroption.MinTLSVersion,
 		})
 		return srv.ListenAndServeTLS("", "")
-	} else if enablestrictTLS == true {
+	} else if enablestrictTLS == true { // ulkub not needed. NO FAIL OPEN
 		return fmt.Errorf("Metrics Server: TLS Configuration Error")
 	}
 	return srv.ListenAndServe()

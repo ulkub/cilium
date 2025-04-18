@@ -48,8 +48,9 @@ func (rc RegistryConfig) Flags(flags *pflag.FlagSet) {
 type RegistryParams struct {
 	cell.In
 
-	Logger     logrus.FieldLogger
-	SLogger    *slog.Logger
+	Logger  logrus.FieldLogger
+	SLogger *slog.Logger
+
 	Shutdowner hive.Shutdowner
 	Lifecycle  cell.Lifecycle
 
@@ -97,17 +98,16 @@ func NewRegistry(params RegistryParams) *Registry {
 
 		params.Lifecycle.Append(cell.Hook{
 			OnStart: func(hc cell.HookContext) error {
+				var metricsTLSConfig *certloader.WatchedServerConfig
 				go func() {
-					params.Logger.Infof("Serving prometheus metrics on %s", params.Config.PrometheusServeAddr)
 					//ubd
-					var err error
-					if params.DaemonConfig.EnableMetricsServerTLS == true {
-						var metricsTLSConfig *certloader.WatchedServerConfig
+					if params.DaemonConfig.AgentEnableMetricsServerTLS == true {
+						params.Logger.Infof("Configuring mTLS for agent metrics server...")
 						metricsTLSConfigChan, err := certloader.FutureWatchedServerConfig(
 							params.SLogger.With("config", "metrics-server-tls"),
-							params.DaemonConfig.MetricsServerTLSClientCAFiles,
-							params.DaemonConfig.MetricsServerTLSCertFile,
-							params.DaemonConfig.MetricsServerTLSKeyFile,
+							params.DaemonConfig.AgentMetricsServerTLSClientCAFiles,
+							params.DaemonConfig.AgentMetricsServerTLSCertFile,
+							params.DaemonConfig.AgentMetricsServerTLSKeyFile,
 						)
 						if err == nil {
 
@@ -121,7 +121,7 @@ func NewRegistry(params RegistryParams) *Registry {
 								case <-hc.Done():
 									timeOver = true
 									err = fmt.Errorf("timeout while waiting for Agent metrics server TLS certificate and key files to be created: %w", hc.Err())
-									break
+									return
 								}
 							}
 
@@ -130,25 +130,38 @@ func NewRegistry(params RegistryParams) *Registry {
 								metricsTLSConfig.Stop()
 							}()
 						}
+
+					}
+				}()
+
+				go func() {
+					params.Logger.Infof("Serving prometheus metrics on %s", params.Config.PrometheusServeAddr)
+					//ubd
+					var err error
+					stoppit := true
+					if params.DaemonConfig.AgentEnableMetricsServerTLS == true {
 						if metricsTLSConfig != nil {
 							srv.TLSConfig = metricsTLSConfig.ServerConfig(&tls.Config{ //nolint:gosec
 								MinVersion: serveroption.MinTLSVersion,
 							})
 							err = srv.ListenAndServeTLS("", "")
-						} else if params.DaemonConfig.EnableStrictTLS == true {
-							err = fmt.Errorf("Metrics Server: TLS Configuration Error")
-						} else {
+						} else if params.DaemonConfig.AgentEnableStrictTLS == false {
 							err = srv.ListenAndServe()
+						} else {
+							err = fmt.Errorf("Agent Metrics Server: TLS Configuration Error")
+							stoppit = false
+							///NOT THE BEST Ulkub
 						}
 
 					} else {
 						err = srv.ListenAndServe()
 					}
 
-					if err != nil && !errors.Is(err, http.ErrServerClosed) {
+					if err != nil && !errors.Is(err, http.ErrServerClosed) && stoppit {
 						params.Shutdowner.Shutdown(hive.ShutdownWithError(err))
 					}
 				}()
+
 				return nil
 			},
 			OnStop: func(hc cell.HookContext) error {
