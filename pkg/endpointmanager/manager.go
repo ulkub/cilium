@@ -17,19 +17,13 @@ import (
 	"github.com/cilium/cilium/pkg/completion"
 	"github.com/cilium/cilium/pkg/container/set"
 	"github.com/cilium/cilium/pkg/controller"
-	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/endpoint"
 	endpointid "github.com/cilium/cilium/pkg/endpoint/id"
 	"github.com/cilium/cilium/pkg/endpoint/regeneration"
 	"github.com/cilium/cilium/pkg/identity"
-	"github.com/cilium/cilium/pkg/identity/cache"
-	"github.com/cilium/cilium/pkg/identity/identitymanager"
-	"github.com/cilium/cilium/pkg/ipcache"
 	"github.com/cilium/cilium/pkg/lock"
 	"github.com/cilium/cilium/pkg/logging"
 	"github.com/cilium/cilium/pkg/logging/logfields"
-	"github.com/cilium/cilium/pkg/maps/ctmap"
-	"github.com/cilium/cilium/pkg/maps/policymap"
 	"github.com/cilium/cilium/pkg/mcastmanager"
 	"github.com/cilium/cilium/pkg/metrics"
 	"github.com/cilium/cilium/pkg/metrics/metric"
@@ -73,10 +67,6 @@ type endpointManager struct {
 	// up-to-date information about endpoints managed by the endpoint manager.
 	EndpointResourceSynchronizer
 
-	// kvstoreSyncher updates the kvstore (e.g., etcd) with up-to-date
-	// information about endpoints.
-	kvstoreSyncher *ipcache.IPIdentitySynchronizer
-
 	// subscribers are notified when events occur in the endpointManager.
 	subscribers map[Subscriber]struct{}
 
@@ -107,6 +97,8 @@ type endpointManager struct {
 	epIDAllocator *epIDAllocator
 
 	monitorAgent monitoragent.Agent
+
+	policyUpdateCallbackDetails
 }
 
 // endpointDeleteFunc is used to abstract away concrete Endpoint Delete
@@ -114,19 +106,19 @@ type endpointManager struct {
 type endpointDeleteFunc func(*endpoint.Endpoint, endpoint.DeleteConfig) []error
 
 // New creates a new endpointManager.
-func New(epSynchronizer EndpointResourceSynchronizer, ks *ipcache.IPIdentitySynchronizer, lns *node.LocalNodeStore, health cell.Health, monitorAgent monitoragent.Agent) *endpointManager {
+func New(epSynchronizer EndpointResourceSynchronizer, lns *node.LocalNodeStore, health cell.Health, monitorAgent monitoragent.Agent) *endpointManager {
 	mgr := endpointManager{
 		health:                       health,
 		endpoints:                    make(map[uint16]*endpoint.Endpoint),
 		endpointsAux:                 make(map[string]*endpoint.Endpoint),
 		mcastManager:                 mcastmanager.New(option.Config.IPv6MCastDevice),
 		EndpointResourceSynchronizer: epSynchronizer,
-		kvstoreSyncher:               ks,
 		subscribers:                  make(map[Subscriber]struct{}),
 		controllers:                  controller.NewManager(),
 		localNodeStore:               lns,
 		epIDAllocator:                newEPIDAllocator(),
 		monitorAgent:                 monitorAgent,
+		policyUpdateCallbackDetails:  newPolicyUpdateCallbackDetails(),
 	}
 	mgr.deleteEndpoint = mgr.removeEndpoint
 	mgr.policyMapPressure = newPolicyMapPressure()
@@ -218,6 +210,11 @@ func (mgr *endpointManager) UpdatePolicyMaps(ctx context.Context, notifyWg *sync
 		if err := waitForProxyCompletions(proxyWaitGroup); err != nil {
 			log.WithError(err).Warning("Failed to apply L7 proxy policy changes. These will be re-applied in future updates.")
 		}
+
+		// Perform policy update call if required.
+		// This should not block the main flow for Endpoint.
+		mgr.policyUpdateCallback(&sync.WaitGroup{}, nil, true)
+
 		wg.Done()
 	}()
 
@@ -613,6 +610,9 @@ func (mgr *endpointManager) RegenerateAllEndpoints(regenMetadata *regeneration.E
 // at the WithoutDatapath level.
 func (mgr *endpointManager) TriggerRegenerateAllEndpoints() {
 	mgr.controllers.TriggerController(regenEndpointControllerName)
+
+	// Trigger regeneration of all Endpoint Policies
+	mgr.policyUpdateCallback(&sync.WaitGroup{}, nil, false)
 }
 
 // OverrideEndpointOpts applies the given options to all endpoints.
@@ -664,8 +664,6 @@ func (mgr *endpointManager) expose(ep *endpoint.Endpoint) error {
 	mgr.updateIDReferenceLocked(ep)
 	mgr.updateReferencesLocked(ep, identifiers)
 	mgr.mutex.Unlock()
-
-	ep.SetKVStoreSynchronizer(mgr.kvstoreSyncher)
 
 	ep.InitEndpointHealth(mgr.health)
 	mgr.RunK8sCiliumEndpointSync(ep, ep.GetReporter("cep-k8s-sync"))
@@ -727,72 +725,6 @@ func (mgr *endpointManager) AddEndpoint(ep *endpoint.Endpoint) (err error) {
 		s.EndpointCreated(ep)
 	}
 	mgr.mutex.RUnlock()
-
-	return nil
-}
-
-func (mgr *endpointManager) AddIngressEndpoint(
-	ctx context.Context,
-	dnsRulesApi endpoint.DNSRulesAPI,
-	epBuildQueue endpoint.EndpointBuildQueue,
-	loader datapath.Loader,
-	orchestrator datapath.Orchestrator,
-	compilationLock datapath.CompilationLock,
-	bandwidthManager datapath.BandwidthManager,
-	ipTablesManager datapath.IptablesManager,
-	identityManager identitymanager.IDManager,
-	monitorAgent monitoragent.Agent,
-	policyMapFactory policymap.Factory,
-	policyRepo policy.PolicyRepository,
-	ipcache *ipcache.IPCache,
-	proxy endpoint.EndpointProxy,
-	allocator cache.IdentityAllocator,
-	ctMapGC ctmap.GCRunner,
-) error {
-	ep, err := endpoint.CreateIngressEndpoint(dnsRulesApi, epBuildQueue, loader, orchestrator, compilationLock, bandwidthManager, ipTablesManager, identityManager, monitorAgent, policyMapFactory, policyRepo, ipcache, proxy, allocator, ctMapGC)
-	if err != nil {
-		return err
-	}
-
-	if err := mgr.AddEndpoint(ep); err != nil {
-		return err
-	}
-
-	ep.InitWithIngressLabels(ctx, launchTime)
-
-	return nil
-}
-
-func (mgr *endpointManager) AddHostEndpoint(
-	ctx context.Context,
-	dnsRulesApi endpoint.DNSRulesAPI,
-	epBuildQueue endpoint.EndpointBuildQueue,
-	loader datapath.Loader,
-	orchestrator datapath.Orchestrator,
-	compilationLock datapath.CompilationLock,
-	bandwidthManager datapath.BandwidthManager,
-	ipTablesManager datapath.IptablesManager,
-	identityManager identitymanager.IDManager,
-	monitorAgent monitoragent.Agent,
-	policyMapFactory policymap.Factory,
-	policyRepo policy.PolicyRepository,
-	ipcache *ipcache.IPCache,
-	proxy endpoint.EndpointProxy,
-	allocator cache.IdentityAllocator,
-	ctMapGC ctmap.GCRunner,
-) error {
-	ep, err := endpoint.CreateHostEndpoint(dnsRulesApi, epBuildQueue, loader, orchestrator, compilationLock, bandwidthManager, ipTablesManager, identityManager, monitorAgent, policyMapFactory, policyRepo, ipcache, proxy, allocator, ctMapGC)
-	if err != nil {
-		return err
-	}
-
-	if err := mgr.AddEndpoint(ep); err != nil {
-		return err
-	}
-
-	node.SetEndpointID(ep.GetID())
-
-	mgr.initHostEndpointLabels(ctx, ep)
 
 	return nil
 }
@@ -887,6 +819,8 @@ func (mgr *endpointManager) UpdatePolicy(idsToRegen *set.Set[identity.NumericIde
 			wg.Done()
 		}(ep)
 	}
+
+	mgr.policyUpdateCallback(&sync.WaitGroup{}, idsToRegen, true)
 
 	wg.Wait()
 }

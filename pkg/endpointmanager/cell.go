@@ -11,16 +11,10 @@ import (
 	"github.com/cilium/hive/cell"
 
 	"github.com/cilium/cilium/pkg/container/set"
-	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/endpoint"
 	"github.com/cilium/cilium/pkg/endpoint/regeneration"
 	"github.com/cilium/cilium/pkg/identity"
-	"github.com/cilium/cilium/pkg/identity/cache"
-	"github.com/cilium/cilium/pkg/identity/identitymanager"
-	"github.com/cilium/cilium/pkg/ipcache"
 	"github.com/cilium/cilium/pkg/k8s/client"
-	"github.com/cilium/cilium/pkg/maps/ctmap"
-	"github.com/cilium/cilium/pkg/maps/policymap"
 	"github.com/cilium/cilium/pkg/metrics"
 	monitoragent "github.com/cilium/cilium/pkg/monitor/agent"
 	"github.com/cilium/cilium/pkg/node"
@@ -96,47 +90,6 @@ type EndpointsLookup interface {
 type EndpointsModify interface {
 	// AddEndpoint takes the prepared endpoint object and starts managing it.
 	AddEndpoint(ep *endpoint.Endpoint) (err error)
-
-	// AddIngressEndpoint creates an Endpoint representing Cilium Ingress on this node without a
-	// corresponding container necessarily existing. This is needed to be able to ingest and
-	// sync network policies applicable to Cilium Ingress to Envoy.
-	AddIngressEndpoint(
-		ctx context.Context,
-		dnsRulesApi endpoint.DNSRulesAPI,
-		epBuildQueue endpoint.EndpointBuildQueue,
-		loader datapath.Loader,
-		orchestrator datapath.Orchestrator,
-		compilationLock datapath.CompilationLock,
-		bandwidthManager datapath.BandwidthManager,
-		ipTablesManager datapath.IptablesManager,
-		identityManager identitymanager.IDManager,
-		monitorAgent monitoragent.Agent,
-		policyMapFactory policymap.Factory,
-		policyRepo policy.PolicyRepository,
-		ipcache *ipcache.IPCache,
-		proxy endpoint.EndpointProxy,
-		allocator cache.IdentityAllocator,
-		ctMapGC ctmap.GCRunner,
-	) error
-
-	AddHostEndpoint(
-		ctx context.Context,
-		dnsRulesApi endpoint.DNSRulesAPI,
-		epBuildQueue endpoint.EndpointBuildQueue,
-		loader datapath.Loader,
-		orchestrator datapath.Orchestrator,
-		compilationLock datapath.CompilationLock,
-		bandwidthManager datapath.BandwidthManager,
-		ipTablesManager datapath.IptablesManager,
-		identityManager identitymanager.IDManager,
-		monitorAgent monitoragent.Agent,
-		policyMapFactory policymap.Factory,
-		policyRepo policy.PolicyRepository,
-		ipcache *ipcache.IPCache,
-		proxy endpoint.EndpointProxy,
-		allocator cache.IdentityAllocator,
-		ctMapGC ctmap.GCRunner,
-	) error
 
 	// RestoreEndpoint exposes the specified endpoint to other subsystems via the
 	// manager.
@@ -225,29 +178,29 @@ var (
 type endpointManagerParams struct {
 	cell.In
 
-	Lifecycle           cell.Lifecycle
-	Config              EndpointManagerConfig
-	Clientset           client.Clientset
-	MetricsRegistry     *metrics.Registry
-	Health              cell.Health
-	EPSynchronizer      EndpointResourceSynchronizer
-	KVStoreSynchronizer *ipcache.IPIdentitySynchronizer
-	LocalNodeStore      *node.LocalNodeStore
-	MonitorAgent        monitoragent.Agent
+	Lifecycle       cell.Lifecycle
+	Config          EndpointManagerConfig
+	Clientset       client.Clientset
+	MetricsRegistry *metrics.Registry
+	Health          cell.Health
+	EPSynchronizer  EndpointResourceSynchronizer
+	LocalNodeStore  *node.LocalNodeStore
+	MonitorAgent    monitoragent.Agent
 }
 
 type endpointManagerOut struct {
 	cell.Out
 
-	Lookup  EndpointsLookup
-	Modify  EndpointsModify
-	Manager EndpointManager
+	Lookup   EndpointsLookup
+	Modify   EndpointsModify
+	Manager  EndpointManager
+	Callback PolicyUpdateCallbackManager
 }
 
 func newDefaultEndpointManager(p endpointManagerParams) endpointManagerOut {
 	checker := endpoint.CheckHealth
 
-	mgr := New(p.EPSynchronizer, p.KVStoreSynchronizer, p.LocalNodeStore, p.Health, p.MonitorAgent)
+	mgr := New(p.EPSynchronizer, p.LocalNodeStore, p.Health, p.MonitorAgent)
 	if p.Config.EndpointGCInterval > 0 {
 		ctx, cancel := context.WithCancel(context.Background())
 		p.Lifecycle.Append(cell.Hook{
@@ -267,9 +220,10 @@ func newDefaultEndpointManager(p endpointManagerParams) endpointManagerOut {
 	mgr.InitMetrics(p.MetricsRegistry)
 
 	return endpointManagerOut{
-		Lookup:  mgr,
-		Modify:  mgr,
-		Manager: mgr,
+		Lookup:   mgr,
+		Modify:   mgr,
+		Manager:  mgr,
+		Callback: mgr,
 	}
 }
 

@@ -61,7 +61,7 @@ cilium-operator-azure [flags]
       --enable-node-ipam                                     Enable Node IPAM
       --enable-node-selector-labels                          Enable use of node label based identity
       --enable-policy string                                 Enable policy enforcement (default "default")
-      --enable-policy-secrets-sync                           Enables fan-in TLS secrets sync from multiple namespaces to singular namespace (specified by tls-interception-secrets-namespace flag)
+      --enable-policy-secrets-sync                           Enables fan-in TLS secrets sync from multiple namespaces to singular namespace (specified by policy-secrets-namespace flag)
       --enforce-ingress-https                                Enforces https for host having matching TLS host in Ingress. Incoming traffic to http listener will return 308 http error code with respective location in header. (default true)
       --gateway-api-hostnetwork-enabled                      Exposes Gateway listeners on the host network.
       --gateway-api-hostnetwork-nodelabelselector string     Label selector that matches the nodes where the gateway listeners should be exposed. It's a list of comma-separated key-value label pairs. e.g. 'kubernetes.io/os=linux,kubernetes.io/hostname=kind-worker'
@@ -146,6 +146,7 @@ cilium-operator-azure [flags]
 * [cilium-operator-azure completion](cilium-operator-azure_completion.md)	 - Generate the autocompletion script for the specified shell
 * [cilium-operator-azure hive](cilium-operator-azure_hive.md)	 - Inspect the hive
 * [cilium-operator-azure metrics](cilium-operator-azure_metrics.md)	 - Access metric status of the operator
+* [cilium-operator-azure shell](cilium-operator-azure_shell.md)	 - Connect to the Cilium shell
 * [cilium-operator-azure status](cilium-operator-azure_status.md)	 - Display status of operator
 * [cilium-operator-azure troubleshoot](cilium-operator-azure_troubleshoot.md)	 - Run troubleshooting utilities to check control-plane connectivity
 

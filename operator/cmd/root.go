@@ -71,6 +71,8 @@ import (
 	features "github.com/cilium/cilium/pkg/metrics/features/operator"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/pprof"
+	shellclient "github.com/cilium/cilium/pkg/shell/client"
+	shell "github.com/cilium/cilium/pkg/shell/server"
 	"github.com/cilium/cilium/pkg/version"
 )
 
@@ -127,6 +129,9 @@ var (
 				OperatorMetricsServerTLSClientCAFiles: operatorCfg.OperatorMetricsServerTLSClientCAFiles,
 			}
 		}),
+
+		// Shell for inspecting the operator. Listens on the 'shell.sock' UNIX socket.
+		shell.Cell,
 	)
 
 	// ControlPlane implements the control functions.
@@ -322,6 +327,7 @@ func NewOperatorCmd(h *hive.Hive) *cobra.Command {
 		MetricsCmd,
 		StatusCmd,
 		troubleshoot.Cmd,
+		shellclient.ShellCmd,
 		h.Command(),
 	)
 
