@@ -1232,14 +1232,14 @@ hubble:
     #
     #   --set hubble.metrics.enabled="{dns:query;ignoreAAAA,drop,tcp,flow,icmp,http}"
     #
-    enabled: ~
+    enabled: ["dns:query;ignoreAAAA","drop","tcp","flow","icmp","http"]
     # -- Enables exporting hubble metrics in OpenMetrics format.
     enableOpenMetrics: false
     # -- Configure the port the hubble metric server listens on.
     port: 9965
     tls:
       # Enable hubble metrics server TLS.
-      enabled: false
+      enabled: true
       # Configure hubble metrics server TLS.
       server:
         # -- Name of the Secret containing the certificate and key for the Hubble metrics server.
@@ -2289,7 +2289,7 @@ pprof:
 # -- Configure prometheus metrics on the configured port at /metrics
 prometheus:
   metricsService: false
-  enabled: false
+  enabled: true
   port: 9962
   serviceMonitor:
     # -- Enable service monitors.
