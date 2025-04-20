@@ -158,7 +158,13 @@ const (
 )
 
 func (s *RedirectSuite) NewTestEndpoint(t *testing.T) *Endpoint {
-	ep := NewTestEndpointWithState(nil, nil, nil, nil, nil, nil, nil, identitymanager.NewIDManager(), nil, s.do.repo, testipcache.NewMockIPCache(), s.rsp, s.mgr, ctmap.NewFakeGCRunner(), 12345, StateRegenerating)
+	model := newTestEndpointModel(12345, StateRegenerating)
+	ep, err := NewEndpointFromChangeModel(t.Context(), nil, &MockEndpointBuildQueue{}, nil, nil, nil, nil, nil, identitymanager.NewIDManager(), nil, nil, s.do.repo, testipcache.NewMockIPCache(), s.rsp, s.mgr, ctmap.NewFakeGCRunner(), nil, model)
+	require.NoError(t, err)
+
+	ep.Start(uint16(model.ID))
+	t.Cleanup(ep.Stop)
+
 	ep.SetPropertyValue(PropertyFakeEndpoint, false)
 
 	epIdentity, _, err := s.mgr.AllocateIdentity(context.Background(), labelsBar.Labels(), true, identityBar)

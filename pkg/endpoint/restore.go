@@ -24,21 +24,16 @@ import (
 	"github.com/cilium/cilium/pkg/common"
 	"github.com/cilium/cilium/pkg/controller"
 	"github.com/cilium/cilium/pkg/datapath/linux/safenetlink"
-	dptypes "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/endpoint/regeneration"
 	"github.com/cilium/cilium/pkg/fqdn"
 	"github.com/cilium/cilium/pkg/fqdn/restore"
 	"github.com/cilium/cilium/pkg/identity"
-	"github.com/cilium/cilium/pkg/identity/identitymanager"
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/labelsfilter"
 	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/mac"
-	"github.com/cilium/cilium/pkg/maps/policymap"
-	monitoragent "github.com/cilium/cilium/pkg/monitor/agent"
 	"github.com/cilium/cilium/pkg/node"
 	"github.com/cilium/cilium/pkg/option"
-	"github.com/cilium/cilium/pkg/policy"
 	"github.com/cilium/cilium/pkg/time"
 )
 
@@ -47,11 +42,13 @@ var (
 	initialGlobalIdentitiesControllerGroup = controller.NewGroup("initial-global-identities")
 )
 
+type EndpointParser interface {
+	ParseEndpoint(epJSON []byte) (*Endpoint, error)
+}
+
 // ReadEPsFromDirNames returns a mapping of endpoint ID to endpoint of endpoints
 // from a list of directory names that can possible contain an endpoint.
-func ReadEPsFromDirNames(ctx context.Context, dnsRulesApi DNSRulesAPI, epBuildQueue EndpointBuildQueue, loader dptypes.Loader, orchestrator dptypes.Orchestrator, compilationLock dptypes.CompilationLock, bandwidthManager dptypes.BandwidthManager, ipTablesManager dptypes.IptablesManager, identityManager identitymanager.IDManager, monitorAgent monitoragent.Agent, policyMapFactory policymap.Factory, policyRepo policy.PolicyRepository,
-	namedPortsGetter namedPortsGetter, basePath string, eptsDirNames []string,
-) map[uint16]*Endpoint {
+func ReadEPsFromDirNames(ctx context.Context, parser EndpointParser, basePath string, eptsDirNames []string) map[uint16]*Endpoint {
 	completeEPDirNames, incompleteEPDirNames := partitionEPDirNamesByRestoreStatus(eptsDirNames)
 
 	if len(incompleteEPDirNames) > 0 {
@@ -82,7 +79,7 @@ func ReadEPsFromDirNames(ctx context.Context, dnsRulesApi DNSRulesAPI, epBuildQu
 			continue
 		}
 
-		ep, err := parseEndpoint(dnsRulesApi, epBuildQueue, loader, orchestrator, compilationLock, bandwidthManager, ipTablesManager, identityManager, monitorAgent, policyMapFactory, policyRepo, namedPortsGetter, state)
+		ep, err := parser.ParseEndpoint(state)
 		if err != nil {
 			scopedLog.WithError(err).Warn("Unable to parse the C header file")
 			continue
@@ -195,7 +192,7 @@ func partitionEPDirNamesByRestoreStatus(eptsDirNames []string) (complete []strin
 // * regenerates the endpoint
 // Returns an error if any operation fails while trying to perform the above
 // operations.
-func (e *Endpoint) RegenerateAfterRestore(regenerator *Regenerator, bwm dptypes.BandwidthManager, resolveMetadata MetadataResolverCB) error {
+func (e *Endpoint) RegenerateAfterRestore(regenerator *Regenerator, resolveMetadata MetadataResolverCB) error {
 	if err := e.restoreHostIfindex(); err != nil {
 		return err
 	}
@@ -207,7 +204,7 @@ func (e *Endpoint) RegenerateAfterRestore(regenerator *Regenerator, bwm dptypes.
 	// Now that we have restored the endpoints' identity, run the metadata
 	// resolver so that we can fetch the latest labels from the pod for this
 	// endpoint.
-	e.RunRestoredMetadataResolver(bwm, resolveMetadata)
+	e.RunRestoredMetadataResolver(resolveMetadata)
 
 	scopedLog := log.WithField(logfields.EndpointID, e.ID)
 
@@ -250,7 +247,7 @@ func (e *Endpoint) restoreIdentity(regenerator *Regenerator) error {
 	}
 	scopedLog := log.WithField(logfields.EndpointID, e.ID)
 	// Filter the restored labels with the new daemon's filter
-	l, _ := labelsfilter.Filter(e.OpLabels.AllLabels())
+	l, _ := labelsfilter.Filter(e.labels.AllLabels())
 	e.runlock()
 
 	// Getting the ep's identity while we are restoring should block the
@@ -416,7 +413,7 @@ func (e *Endpoint) toSerializedEndpoint() *serializableEndpoint {
 		IfIndex:                  e.ifIndex,
 		ContainerIfName:          e.containerIfName,
 		DisableLegacyIdentifiers: e.disableLegacyIdentifiers,
-		OpLabels:                 e.OpLabels,
+		Labels:                   e.labels,
 		LXCMAC:                   e.mac,
 		IPv6:                     e.IPv6,
 		IPv6IPAMPool:             e.IPv6IPAMPool,
@@ -481,10 +478,8 @@ type serializableEndpoint struct {
 	// (container name, container id, pod name) for this endpoint.
 	DisableLegacyIdentifiers bool
 
-	// OpLabels is the endpoint's label configuration
-	//
-	// FIXME: Rename this field to Labels
-	OpLabels labels.OpLabels
+	// Labels is the endpoint's label configuration
+	Labels labels.OpLabels `json:"OpLabels"`
 
 	// mac is the MAC address of the endpoint
 	//
@@ -562,7 +557,7 @@ func (ep *Endpoint) UnmarshalJSON(raw []byte) error {
 	// We may have to populate structures in the Endpoint manually to do the
 	// translation from serializableEndpoint --> Endpoint.
 	restoredEp := &serializableEndpoint{
-		OpLabels:   labels.NewOpLabels(),
+		Labels:     labels.NewOpLabels(),
 		Options:    option.NewIntOptions(&EndpointMutableOptionLibrary),
 		DNSHistory: fqdn.NewDNSCacheWithLimit(option.Config.ToFQDNsMinTTL, option.Config.ToFQDNsMaxIPsPerHost),
 		DNSZombies: fqdn.NewDNSZombieMappings(option.Config.ToFQDNsMaxDeferredConnectionDeletes, option.Config.ToFQDNsMaxIPsPerHost),
@@ -592,7 +587,7 @@ func (ep *Endpoint) fromSerializedEndpoint(r *serializableEndpoint) {
 	ep.ifIndex = r.IfIndex
 	ep.containerIfName = r.ContainerIfName
 	ep.disableLegacyIdentifiers = r.DisableLegacyIdentifiers
-	ep.OpLabels = r.OpLabels
+	ep.labels = r.Labels
 	ep.mac = r.LXCMAC
 	ep.IPv6 = r.IPv6
 	ep.IPv6IPAMPool = r.IPv6IPAMPool

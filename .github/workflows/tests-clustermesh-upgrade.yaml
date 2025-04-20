@@ -274,7 +274,7 @@ jobs:
           wait: 0 # The control-plane never becomes ready, since no CNI is present
 
       - name: Install Cilium CLI
-        uses: cilium/cilium-cli@0caa9e5cbfe3a80a1fd6bbc1f5f9926da35b0373 # v0.18.2
+        uses: cilium/cilium-cli@e7f03e4ec38a7008f4f5b9855ca9df721a9db185 # v0.18.3
         with:
           skip-build: ${{ env.CILIUM_CLI_SKIP_BUILD }}
           image-repo: ${{ env.CILIUM_CLI_IMAGE_REPO }}
@@ -422,7 +422,7 @@ jobs:
           done
 
 
-      - name: Install Cilium in cluster1
+      - name: Install Cilium ${{ steps.vars.outputs.downgrade_version }} in cluster1
         id: install-cilium-cluster1
         env:
           KVSTORE_ID: 1
@@ -733,7 +733,7 @@ jobs:
           json-filename: "${{ env.job_name }} (${{ join(matrix.*, ', ') }}) - cluster 2 - stress-test"
 
 
-      - name: Downgrade Cilium in cluster1 and enable kvstoremesh again
+      - name: Downgrade Cilium in cluster1 to ${{ steps.vars.outputs.downgrade_version }} and enable kvstoremesh again
         env:
           KVSTORE_ID: 1
         run: |

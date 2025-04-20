@@ -76,6 +76,7 @@ func (mm *metricsManager) Start(ctx cell.HookContext) error {
 						//	mm.logger.Info("timeout while waiting for Operator metrics server TLS certificate and key files to be created")
 						return
 					}
+
 				}
 				go func() {
 					mm.logger.Info("Veni vidi vici1")
